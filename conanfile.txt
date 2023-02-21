@@ -1,0 +1,8 @@
+[requires]
+gflags/2.2.2
+openssl/1.1.1s
+box2d/2.4.1
+flatbuffers/22.12.06
+
+[generators]
+cmake

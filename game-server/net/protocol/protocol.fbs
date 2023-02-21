@@ -1,0 +1,27 @@
+include "game_packet.fbs";
+
+namespace game;
+
+union Payload {
+    ConnectReq,
+    ConnectRep,
+    MatchReq,
+    MatchRep,
+    BattleReadyReq,
+    GameStatusPush,
+    ChangePlayerStatusReq,
+    SpawnEntityPush,
+    ChangeEntityStatusPush,
+    CollisionEventPush,
+    PingPush,
+    PingAck,
+    ChangePlayerStatusPush,
+}
+
+
+table Packet {
+    version:ushort;
+    messages:[Payload];
+}
+
+root_type Packet;

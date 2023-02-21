@@ -1,0 +1,113 @@
+// example IDL file
+
+namespace game;
+
+enum MatchResultCode : byte { Ok = 0, NoOpponent, Failed, CancelComplete }
+
+table UserInfo {
+  id:ubyte;
+  nickname:string;
+}
+
+struct UserStatus {
+  id:ubyte;
+  me:bool;
+  connected:bool;
+  ping:ushort;
+}
+
+struct RoomSetting {
+  frame_rate:ubyte;
+  starting_countdown_second:ubyte;
+  world_gravity:byte;
+  initial_player_hp:ubyte;
+  gunshot_damage:ubyte;
+  rockfalll_damage:ubyte;
+  player_shot_cooltime:ubyte;
+  player_ground_movement_force:float;
+  player_jump_velocity:float;
+  hp_item_value:ubyte;
+}
+
+table ConnectReq {
+  nickname:string;
+}
+
+table ConnectRep {
+  success:bool;
+}
+
+table MatchReq {
+  cancel:bool;
+}
+
+table MatchRep {
+  code:MatchResultCode = Ok;
+  setting:RoomSetting;
+  users:[UserInfo];
+}
+
+table BattleReadyReq {}
+
+enum GameStatusCode : ubyte { Wait = 0, Countdown, Start, DropWait, End } 
+
+table GameStatusPush {
+  status_code:GameStatusCode;
+  users:[UserStatus];
+  winner_id:ubyte;
+}
+
+enum EntityType : ubyte {
+  Map = 1,
+  Player = 2,
+  Rockfall = 4,
+  PlayerGunShot = 8,
+  FieldItem = 16,
+}
+enum EntityAction : ubyte { Left = 0, Right, Stop, Jump, Shot }
+
+struct Vec2 {
+  x:float;
+  y:float;
+}
+
+struct EntityStatus {
+  id:int;
+  hp:byte;
+  position:Vec2;
+  linear_velocity:Vec2;
+}
+
+table SpawnEntityPush {
+  entity_type:EntityType = Map;
+  entity_status:EntityStatus;
+}
+
+table ChangePlayerStatusReq {
+  action:[EntityAction];
+}
+
+table CollisionEventPush {
+  collision_code:int;
+  entity_a_status:EntityStatus;
+  entity_b_status:EntityStatus;
+}
+
+table ChangeEntityStatusPush {
+  action:[EntityAction];
+  status:EntityStatus;
+}
+
+table ChangePlayerStatusPush {
+  jumpable:bool;
+  shootable:bool;
+}
+
+
+table PingPush {
+  delay:int;
+}
+
+table PingAck {
+
+}
