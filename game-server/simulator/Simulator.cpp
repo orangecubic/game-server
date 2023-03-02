@@ -94,6 +94,8 @@ void Simulator::simulate(float delta) {
         pair.second->simulate(delta);
     }
 
+    mWorld->Step(delta, 6, 2);
+
     for (auto& handler : mContactEventQueue) {
         handler();
     }
@@ -110,8 +112,6 @@ void Simulator::simulate(float delta) {
         mEntityMap.erase(entityIter);
     }
     mDestroyQueue.clear();
-    
-    mWorld->Step(delta, 6, 2);
 }
 
 int Simulator::getSimulatorId() {
