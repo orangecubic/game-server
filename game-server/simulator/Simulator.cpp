@@ -23,7 +23,7 @@ Simulator::Simulator(int id, EventCallback* callback, float worldGravity, const 
     }
     
     std::vector<int> entityTypes = {EntityType::Map, EntityType::Player, EntityType::Rockfall, EntityType::PlayerGunShot, EntityType::FieldItem};
-    std::unordered_map<int, int> eventCodeMap;
+    std::map<int, int> eventCodeMap;
     for (auto code : enabledContact) {
         for (auto type : entityTypes) {
             if (code & type) {
@@ -234,7 +234,7 @@ void Simulator::onGunshotContactMap(IEntity* mapE, IEntity* gunshotE) {
     // mEventCallback->onRockfallHitGunshot((Rockfall*)rockfallE, (GunShot*)gunshotE);
 }
 
-const std::unordered_map<int, IEntity*>& Simulator::getEntityMap() {
+const std::map<int, IEntity*>& Simulator::getEntityMap() {
     return mEntityMap;
 }
 

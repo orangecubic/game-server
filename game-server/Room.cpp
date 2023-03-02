@@ -309,7 +309,7 @@ const game::RoomSetting& Room::getRoomSetting() {
     return mSetting;
 }
 
-const std::unordered_map<int, RoomUser*>& Room::getUsers() {
+const std::map<int, RoomUser*>& Room::getUsers() {
     return mUserList;
 }
 

@@ -10,7 +10,6 @@
 #include "DefaultMap.h"
 #include "SimulatorSetting.h"
 #include <map>
-#include <unordered_map>
 #include <functional>
 #include <set>
 
@@ -55,7 +54,7 @@ public:
 
     void simulate(float delta);
 
-    const std::unordered_map<int, IEntity*>& getEntityMap();
+    const std::map<int, IEntity*>& getEntityMap();
 
     IMap* getMap();
 
@@ -80,8 +79,8 @@ private:
     
     std::set<int> mEnabledContact;
     int mEntitySequence = 0;
-    std::unordered_map<int, IEntity*> mEntityMap;
-    std::unordered_map<int, std::function<void(IEntity*, IEntity*)>> mContactListenerMap;
+    std::map<int, IEntity*> mEntityMap;
+    std::map<int, std::function<void(IEntity*, IEntity*)>> mContactListenerMap;
     std::vector<std::function<void()>> mContactEventQueue;
     std::vector<int> mDestroyQueue;
     

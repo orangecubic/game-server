@@ -6,6 +6,7 @@
 #include "photon/common/lockfree_queue.h"
 #include "photon/thread/workerpool.h"
 #include "PacketBuilder.h"
+#include <map>
 #include <chrono>
 #include <vector>
 #include <memory>
@@ -29,8 +30,8 @@ struct RoomUser {
 class Room : Simulator::EventCallback {
 private:
     Simulator* mWorldSimulator;
-    std::unordered_map<int, RoomUser*> mUserList;
-    std::unordered_map<Connection*, int> mConnectionMap;
+    std::map<int, RoomUser*> mUserList;
+    std::map<Connection*, int> mConnectionMap;
 
     bool mRun = true;
     game::GameStatusCode mStatusCode;
@@ -53,7 +54,7 @@ public:
     int getRoomId();
     int getUserId(Connection* connection);
     const game::RoomSetting& getRoomSetting();
-    const std::unordered_map<int, RoomUser*>& getUsers();
+    const std::map<int, RoomUser*>& getUsers();
 
     virtual void onPlayerContactMap(Player*, IMap*);
     virtual void onPlayerHitGunshot(Player*, GunShot*);
