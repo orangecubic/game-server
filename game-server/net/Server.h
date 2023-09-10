@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <netinet/tcp.h>
 #include "photon/net/socket.h"
 #include "photon/common/io-alloc.h"
 #include "photon/thread/thread11.h"
@@ -11,7 +12,10 @@
 
 using PacketLength = uint16_t;
 
+// 패킷 사이즈 헤더의 길이를 2바이트로 정의
 constexpr uint16_t PacketLengthSize = sizeof(PacketLength);
+
+// 프로토콜 버전 0.1
 constexpr unsigned char PROTOCOL_VERSION[] = {0, 1};
 constexpr unsigned short PROTOCOL_VERSION_SCALAR = (PROTOCOL_VERSION[1] * 256) + PROTOCOL_VERSION[0];
 
