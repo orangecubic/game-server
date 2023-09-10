@@ -204,17 +204,6 @@ int Room::startRoomSimulation() {
 
     GroupRoutine groupRoutine;
 
-    // sender routine
-    for (auto& user : mUserList) {
-        auto roomUser = user.second;
-
-        groupRoutine.loopWithGroup([&](){
-            user.second->packetBuilder.waitPacket();
-            photon::thread_usleep(15 * 1000);
-            user.second->packetBuilder.sendPacketAndReset(user.second->socketConnection.get());
-        });
-    }
-
     // ping routine
     groupRoutine.loopWithGroup([&]() {
         for (auto& user : mUserList) {
@@ -284,6 +273,10 @@ int Room::startRoomSimulation() {
         delta = (float)(double(std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count()) / 1000.0f);
 
         mWorldSimulator->simulate(delta);
+
+        for (auto& entry : mUserList) {
+            entry.second->packetBuilder.sendPacketAndReset(entry.second->socketConnection.get());
+        }
     }
 
     mStatusCode = game::GameStatusCode_End;
