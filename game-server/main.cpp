@@ -1,4 +1,6 @@
-#include "GameServer.h"
+#include "net/Server.h"
+#include "PacketProcess.h"
+#include "MatchMaker.h"
 #include "gflags/gflags.h"
 #include "photon/photon.h"
 #include "photon/thread/thread.h"
@@ -15,8 +17,17 @@ int main() {
     // photon::WorkPool workPool(8, photon::INIT_EVENT_IOURING, photon::INIT_IO_DEFAULT, 0);
     photon::WorkPool workPool(8, photon::INIT_EVENT_EPOLL, photon::INIT_IO_DEFAULT, 0);
 
-    GameServer* gameServer = new GameServer(&workPool, "0.0.0.0", 9988);
+    MatchMaker* matchMaker = new MatchMaker(&workPool);
 
-    // start game server
-    gameServer->start();
+    PacketProcess* packetprocessor = new PacketProcess(matchMaker);
+
+    Server* server = new Server(&workPool, packetprocessor);
+
+    if (server->init("0.0.0.0", 9988) == -1) {
+        return -1;
+    }
+
+    matchMaker->start();
+
+    server->start(true);
 }

@@ -35,8 +35,8 @@ public:
 
     void pushBack(const T& data) {
         if (mCapacity == mStartingIndex + mCount) {
-            auto newCapacity = mCapacity*2;
-            auto newBuffer = (T*)malloc(DATA_SIZE*newCapacity);
+            uint32_t newCapacity = mCapacity*2;
+            T* newBuffer = (T*)malloc(DATA_SIZE*newCapacity);
 
             std::memcpy(newBuffer, mBuffer+mStartingIndex, DATA_SIZE*mCount);
 

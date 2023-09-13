@@ -17,9 +17,10 @@ private:
     std::vector<flatbuffers::Offset<void>> mPayloadOffsetList;
     photon::condition_variable mPacketMonitor;
 
+    Connection* mConnection;
 public:
 
-    
+    PacketBuilder(Connection* connection);    
 
     void addConnectRepMessage(bool success);
     void addMatchRepMessage(game::MatchResultCode code, const game::RoomSetting& roomSetting, const std::vector<Packet_User>& userList);
@@ -32,7 +33,7 @@ public:
     void addCollisionEventPushMessage(int collisionCode, const game::EntityStatus& entityAStatus, const game::EntityStatus& entityBStatus);
     void addChangeEntityStatusPushMessage(const uint8_t* actions, int actionCount, const game::EntityStatus& entityBStatus);
 
-    int sendPacketAndReset(Connection* connection);
+    int sendPacketAndReset();
 
     void waitPacket();
     void releaseAll();

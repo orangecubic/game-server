@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <vector>
 
+Packetbuilder::PacketBuilder(Connection* connection) : mConnection(connection) { }
+
 void PacketBuilder::addConnectRepMessage(bool success) {
     auto offset = game::CreateConnectRep(mBuilder, success);
 
@@ -90,7 +92,7 @@ void PacketBuilder::releaseAll() {
     mPacketMonitor.notify_all();
 }
 
-int PacketBuilder::sendPacketAndReset(Connection* connection) {
+int PacketBuilder::sendPacketAndReset() {
     if (mPayloadOffsetList.empty()) {
         return -1;
     }
@@ -109,7 +111,7 @@ int PacketBuilder::sendPacketAndReset(Connection* connection) {
             mBuilder.GetSize()
         }
     };
-    int result = connection->writev(sendVec, 2);
+    int result = this->mConnection->writev(sendVec, 2);
 
     mPayloadOffsetList.clear();
     mPayloadTypeList.clear();

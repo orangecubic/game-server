@@ -65,6 +65,12 @@ public:
 
     void setMovementForce(int force);
     
+    void setLastShotTime();
+    void setLastPingTime();
+
+    int64_t getLastPingTime();
+
+    int64_t getLastShotTime();
 private:
 
     int mPositionStatus = PlayerPositionStatus_Ground;
@@ -75,4 +81,6 @@ private:
     
     int mMovementForce;
 
+    int64_t mLastShotTime;
+    int64_t mLastPingTime;
 };

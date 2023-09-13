@@ -6,32 +6,21 @@
 #include "photon/common/lockfree_queue.h"
 #include "photon/thread/workerpool.h"
 #include "PacketBuilder.h"
+#include "User.h"
 #include <map>
 #include <chrono>
 #include <vector>
 #include <memory>
 
-struct UserInfo {
-    std::string nickname;
-    std::shared_ptr<Connection> connection;
-};
-
 struct RoomUser {
     bool battleReady;
-    IEntity* userEntity;
-    std::shared_ptr<Connection> socketConnection;
-    std::string userNickname;
-    std::chrono::system_clock::time_point lastPingTime;
-    std::chrono::system_clock::time_point lastShotTime;
-    int currentPing;
-    PacketBuilder packetBuilder;
+    User* user;
 };
 
 class Room : Simulator::EventCallback {
 private:
     Simulator* mWorldSimulator;
-    std::map<int, RoomUser*> mUserList;
-    std::map<Connection*, int> mConnectionMap;
+    std::map<int, RoomUser*> mUserMap;
 
     bool mRun = true;
     game::GameStatusCode mStatusCode;
@@ -45,14 +34,14 @@ private:
     void onPlayerHit(Player*);
     void syncUser(RoomUser*);
 public:
-    Room(int roomId, const std::vector<UserInfo>& users, game::RoomSetting setting);
+    Room(int roomId, const std::vector<User*>& users, game::RoomSetting setting);
         
-    void disconnectClient(int, Connection*);
-    void processClientPacket(int userId, const game::Packet*);
+    void disconnectUser(User* user);
+    void readyForBattle(User* user);
+
     int startRoomSimulation();
 
     int getRoomId();
-    int getUserId(Connection* connection);
     const game::RoomSetting& getRoomSetting();
     const std::map<int, RoomUser*>& getUsers();
 
