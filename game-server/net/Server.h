@@ -32,12 +32,21 @@ public:
     int init(const photon::net::EndPoint& address);
     int init(const std::string& bindIp, unsigned short port);
     int start(bool block = true);
-    void stop(bool gracefulShutdown = true);
+    void stop();
 private:
+
+    // 클라이언트 루틴이 실행될 worker의 pool
     photon::WorkPool* mWorkerPool = nullptr;
+
+    // 서버
     photon::net::ISocketServer* mServer = nullptr;
+
+    // 서버 바인드 주소 정보
     photon::net::EndPoint mEndpoint;
+
+    // 서버 callback
     Callback* mCallback = nullptr;
+
     std::atomic_bool mStart = false;
 
     int acceptHandler(photon::net::ISocketStream* stream);

@@ -1,8 +1,10 @@
 #include "Simulator.h"
+#include "../Room.h"
 #include <algorithm>
 
-Simulator::Simulator(int id, EventCallback* callback, float worldGravity, const std::set<int>& enabledContact) : mId(id), mEventCallback(callback), mEnabledContact(enabledContact) {
+Simulator::Simulator(Room* room, int id, EventCallback* callback, float worldGravity, const std::set<int>& enabledContact) : mId(id), mEventCallback(callback), mEnabledContact(enabledContact) {
     
+    mRoom = room;
     mWorld = new b2World(b2Vec2(0, worldGravity));
     mWorld->SetContactListener(this);
 
@@ -112,6 +114,10 @@ void Simulator::simulate(float delta) {
         mEntityMap.erase(entityIter);
     }
     mDestroyQueue.clear();
+}
+
+Room* Simulator::getRoom() {
+    return mRoom;
 }
 
 int Simulator::getSimulatorId() {

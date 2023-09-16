@@ -10,7 +10,7 @@
 class PacketProcess : public Server::Callback {
 public:
 
-    PacketProcess(MatchMaker* matchMaker);
+    PacketProcess(photon::WorkPool* workPool, MatchMaker* matchMaker);
 
     virtual void onConnect(const std::shared_ptr<Connection>& connection) override;
     virtual void onPacket(const std::shared_ptr<Connection>& connection, const game::Packet* packet, const char* buffer, int size) override;
@@ -21,13 +21,10 @@ private:
     photon::mutex mNicknameGuard;
     photon::WorkPool* mWorkPool;
 
-    template <typename T, typename Handler>
-    void RoutinePerPacketMiddleware(const UserPtr& user, const T* packet, const Handler& handler)
-    {
-        photon::thread_create11([=]() {
-            handler(connection, packet);
-        });
-    }
+#define RoutinePerPacketMiddleware(user, packet, handler) \
+    photon::thread_create11([=]() { \
+        handler(user, packet); \
+    }); \
 
     void OnConnectReq(const UserPtr& user, const game::ConnectReq* packet);
     void OnMatchReq(const UserPtr& user, const game::MatchReq* packet);

@@ -30,6 +30,45 @@ int Connection::writev(const iovec* vec, int count) {
     return this->mStream->writev(vec, count);
 }
 
+bool Connection::bufferedWrite(const iovec* iovecList, int count) {
+
+    int totalWriteSize = 0;
+    for (int index = 0; index < count; index++)
+        totalWriteSize += iovecList[index].iov_len;
+
+    if (mWriteBufferSize + totalWriteSize > mWriteBuffer.size())
+        return false;
+
+    for (int index = 0; index < count; index++) {
+
+        const iovec& vec = iovecList[index];
+
+        std::memcpy(&mWriteBuffer[mWriteBufferSize], vec.iov_base, vec.iov_len);
+
+        mWriteBufferSize += vec.iov_len;
+    }
+
+    mWriteBufferMonitor.notify_one();
+
+    return true;
+}
+
+int Connection::writeBuffer() {
+
+    if (mWriteBufferSize == 0)
+        return 0;
+
+    int result = write(mWriteBuffer.begin(), mWriteBufferSize);
+
+    mWriteBufferSize = 0;
+
+    return result;
+}
+
+void Connection::waitWriteBuffer() {
+    mWriteBufferMonitor.wait_no_lock();
+}
+
 void Connection::close() {
     mIsConnected = false;
     this->mStream->close();

@@ -55,7 +55,6 @@ int WorkerProfiler::getAvailableWorkerNumber() {
     while(retryCount-- != 0) {
         workerNumber = rd() % mWorkPool->get_vcpu_num();
 
-
         if (mAvailableWorkers[workerNumber]) {
             return workerNumber;
         }

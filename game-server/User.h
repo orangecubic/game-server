@@ -1,11 +1,12 @@
 #pragma once
 
 #include "net/protocol/protocol_generated.h"
+#include "photon/thread/workerpool.h"
 #include "net/Connection.h"
-#include "PacketBuilder.h"
 #include "simulator/Player.h"
 
 enum UserState {
+    Unauthenticated,
     Lobby,
     Matching,
     BattleWait,
@@ -15,16 +16,14 @@ enum UserState {
 class Room;
 class User {
 public:
-    User(const std::shared_ptr<Connection>& connection);
+    User(photon::WorkPool* workPool, const std::shared_ptr<Connection>& connection);
 
     bool IsAuthenticated();
-    std::string_view GetNickname();
+    const std::string& GetNickname();
     
-    Connection* GetConnection();
-    int GetWorkerId();
+    Connection* GetConnection();\
     Room* GetRoom();
     Player* GetPlayer();
-    PacketBuilder* GetPacketBuilder();
 
     void SetAuthenticated(std::string_view nickname);
     void SetRoom(const std::shared_ptr<Room>& room, int workerIndex, Player* player);
@@ -33,10 +32,15 @@ public:
 
     void migrateThreadIfNeed();
 private:
-    bool mAuthenticated;
-    std::shared_ptr<Connection> mConnection;
+
+    UserState mState = UserState::Unauthenticated;
+
+    bool mAuthenticated = false;
+
+    photon::WorkPool* mWorkPool;
+    std::shared_ptr<Connection> mConnection = nullptr;
     std::string mNickname;
-    std::shared_ptr<Room> mRoom;
+    std::shared_ptr<Room> mRoom = nullptr;
     Player* mGamePlayer;
 
     int mRoomWorker = -1;    

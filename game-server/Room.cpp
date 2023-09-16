@@ -6,8 +6,21 @@
 #include <algorithm>
 #include <random>
 
+game::Vec2 convertVec2(const simVec2& vec2) {
+    return game::Vec2(vec2.x, vec2.y);
+}
+
+game::EntityStatus toEntityStatus(IEntity* entity) {
+    return game::EntityStatus(
+        entity->getEntityId(),
+        entity->getHp(),
+        convertVec2(entity->getPosition()),
+        convertVec2(entity->getLinearVelocity())
+    );
+}
+
 Room::Room(int roomId, const std::vector<User*>& users, game::RoomSetting setting) 
-    : mId(roomId), mStatusCode(game::GameStatusCode_Wait), mWorldSimulator(new Simulator(0, this, setting.world_gravity())), mSetting(setting), mCreationTime(std::chrono::system_clock::now()) { 
+    : mId(roomId), mStatusCode(game::GameStatusCode_Wait), mWorldSimulator(new Simulator(this, 0, this, setting.world_gravity())), mSetting(setting), mCreationTime(std::chrono::system_clock::now()) { 
     
     auto& spawnPoints = mWorldSimulator->getMap()->getSpawnPoints();
 
@@ -21,20 +34,8 @@ Room::Room(int roomId, const std::vector<User*>& users, game::RoomSetting settin
         auto player = mWorldSimulator->spawnPlayer(spawnPoint, mSetting.initial_player_hp(), mSetting.player_ground_movement_force());
 
         mUserMap.insert_or_assign(player->getEntityId(), new RoomUser{false, user});
+        mPlayerMap.insert_or_assign(user, player);
     }
-}
-
-inline game::Vec2 convertVec2(const simVec2& vec2) {
-    return game::Vec2(vec2.x, vec2.y);
-}
-
-inline game::EntityStatus toEntityStatus(IEntity* entity) {
-    return game::EntityStatus(
-        entity->getEntityId(),
-        entity->getHp(),
-        convertVec2(entity->getPosition()),
-        convertVec2(entity->getLinearVelocity())
-    );
 }
 
 void Room::disconnectUser(User* user) {
@@ -51,6 +52,13 @@ void Room::disconnectUser(User* user) {
 
     mRun = false;
     mWinnerId = winnerIter->first;
+}
+
+void Room::readyForBattle(User* user) {
+    Player* player = user->GetPlayer();
+    if (player == nullptr)
+        return;
+    mUserMap[player->getEntityId()]->battleReady = true;
 }
 
 int Room::getRoomId() {
@@ -72,54 +80,59 @@ void Room::onPlayerHit(Player* player) {
     }
 }
 
-void Room::onPlayerContactMap(Player* player, IMap* map) {
-
-}
+void Room::onPlayerContactMap(Player* player, IMap* map) { }
 
 void Room::onPlayerHitGunshot(Player* player, GunShot* gunshot) {
-    for(auto& entry : mUserMap) {
-        entry.second->user->GetPacketBuilder()->addCollisionEventPushMessage(player->getEntityType() | gunshot->getEntityType(), toEntityStatus(player), toEntityStatus(gunshot));
-    }
+
+    broadcastPacket(
+        SharedPacketBuilder.addCollisionEventPushMessage(player->getEntityType() | gunshot->getEntityType(), toEntityStatus(player), toEntityStatus(gunshot)).buildPacket()
+    );
     onPlayerHit(player);
 }
 
 void Room::onRockfallHitGunshot(Rockfall* rockfall, GunShot* gunshot) {
-    for(auto& entry : mUserMap) {
-        entry.second->user->GetPacketBuilder()->addCollisionEventPushMessage(rockfall->getEntityType() | gunshot->getEntityType(), toEntityStatus(rockfall), toEntityStatus(gunshot));
-    }
+    broadcastPacket(
+        SharedPacketBuilder.addCollisionEventPushMessage(rockfall->getEntityType() | gunshot->getEntityType(), toEntityStatus(rockfall), toEntityStatus(gunshot)).buildPacket()
+    );
 }
 
 void Room::onHitRockfall(Player* player, Rockfall* rockfall) {
-    for(auto& entry : mUserMap) {
-        entry.second->user->GetPacketBuilder()->addCollisionEventPushMessage(player->getEntityType() | rockfall->getEntityType(), toEntityStatus(player), toEntityStatus(rockfall));
-    }
+    broadcastPacket(
+        SharedPacketBuilder.addCollisionEventPushMessage(player->getEntityType() | rockfall->getEntityType(), toEntityStatus(player), toEntityStatus(rockfall)).buildPacket()
+    );
     onPlayerHit(player);
 }
 
 void Room::onPickupHp(Player* player, HpItem* item) {
-    for(auto& entry : mUserMap) {
-        entry.second->user->GetPacketBuilder()->addCollisionEventPushMessage(player->getEntityType() | item->getEntityType(), toEntityStatus(player), toEntityStatus(item));
-    }
+    broadcastPacket(
+        SharedPacketBuilder.addCollisionEventPushMessage(player->getEntityType() | item->getEntityType(), toEntityStatus(player), toEntityStatus(item)).buildPacket()
+    );
 }
 
-void Room::syncUser(RoomUser* user) {
+void Room::syncUser() {
     auto& entityMap = mWorldSimulator->getEntityMap();
+    
+    for (auto entry : mUserMap) {
 
-    std::vector<game::UserStatus> userStatus(mUserMap.size());
+        std::vector<game::UserStatus> userStatus(mUserMap.size());
 
-    std::transform(mUserMap.begin(), mUserMap.end(), userStatus.begin(), [=](const decltype(mUserMap)::iterator::value_type& entry) {
-        return game::UserStatus{
-            entry.first,
-            user->user->GetPlayer()->getEntityId() == entry.first,
-            true,
-            entry.second->user->GetPlayer()->getLastPingTime(),
-        };
-    });
+        std::transform(mUserMap.begin(), mUserMap.end(), userStatus.begin(), [=](const decltype(mUserMap)::iterator::value_type& entry) {
+            return game::UserStatus{
+                entry.first,
+                entry.second->user->GetPlayer()->getEntityId() == entry.first,
+                true,
+                entry.second->user->GetPlayer()->getPing(),
+            };
+        });
 
-    user->user->GetPacketBuilder()->addGameStatusPushMessage(mStatusCode, userStatus);
-    for (auto& entry : entityMap) {
-        user->user->GetPacketBuilder()->addSpawnEntityPushMessage((game::EntityType)entry.second->getEntityType(), toEntityStatus(entry.second));
+        SharedPacketBuilder.addGameStatusPushMessage(mStatusCode, userStatus).sendPacketAndReset(entry.second->user);
     }
+
+    auto& builder = SharedPacketBuilder;
+    for (auto& entry : entityMap) {
+        builder.addSpawnEntityPushMessage((game::EntityType)entry.second->getEntityType(), toEntityStatus(entry.second));
+    }
+    broadcastPacket(builder.buildPacket());
 }
 
 int Room::startRoomSimulation() {
@@ -131,22 +144,23 @@ int Room::startRoomSimulation() {
         auto roomUser = user.second;
 
         groupRoutine.loopWithGroup([&](){
-            user.second->user->GetPacketBuilder()->waitPacket();
-            user.second->user->GetPacketBuilder()->sendPacketAndReset();
+            
+            Connection* connection = user.second->user->GetConnection();
+            
+            connection->waitWriteBuffer();
+            connection->writeBuffer();
         });
     }
 
     // ping routine
-    /*
     groupRoutine.loopWithGroup([&]() {
-        for (auto& user : mUserMap) {
-            auto packetBuilder = user.second->user->GetPacketBuilder();
-            user.second->lastPingTime = std::chrono::system_clock::now();
-            packetBuilder.addPingPushMessage(user.second->currentPing);
+        for (auto& entry : mUserMap) {
+            entry.second->user->GetPlayer()->startPingRoutine();
+            sendPacket(entry.second->user, SharedPacketBuilder.addPingPushMessage(entry.second->user->GetPlayer()->getPing()).buildPacket());
         }
+
         photon::thread_sleep(3);
     });
-    */
 
     bool clientReady = false;
     do {
@@ -159,13 +173,11 @@ int Room::startRoomSimulation() {
     LOG_INFO("room ", mId, " all client is ready");
 
     mStatusCode = game::GameStatusCode_Countdown;
-    for (auto& user : mUserMap) {
-        syncUser(user.second);
-    }
+    
+    syncUser();
 
     photon::thread_sleep(mSetting.starting_countdown_second());
 
-    
     std::random_device rd;
 
     // spawn routine
@@ -175,19 +187,17 @@ int Room::startRoomSimulation() {
 
         for (int iter = 0; iter < count; iter++) {
             auto rockfall = mWorldSimulator->spawnRockfall(simVec2(rd() % 18 + 2, 9), this->mSetting.rockfalll_damage());
-            for (auto& user : mUserMap) {
-                auto packetBuilder = user.second->user->GetPacketBuilder();
-                packetBuilder->addSpawnEntityPushMessage(game::EntityType_Rockfall, toEntityStatus(rockfall));
-            }
+            broadcastPacket(
+                SharedPacketBuilder.addSpawnEntityPushMessage(game::EntityType_Rockfall, toEntityStatus(rockfall)).buildPacket()
+            );
         }
     });
 
     mStatusCode = game::GameStatusCode_Start;
-    for (auto& user : mUserMap) {
-        auto packetBuilder = user.second->user->GetPacketBuilder();
-        packetBuilder->addGameStatusPushMessage(game::GameStatusCode_Start, {});
-        packetBuilder->sendPacketAndReset();
-    }
+
+    broadcastPacket(
+        SharedPacketBuilder.addGameStatusPushMessage(game::GameStatusCode_Start, {}).buildPacket()
+    );
 
     float frame = mSetting.frame_rate();
     float fixedDelta = 1.0f/frame;
@@ -198,7 +208,6 @@ int Room::startRoomSimulation() {
 
     // main simulation loop
     while(mRun) {
-
         startTime = std::chrono::high_resolution_clock::now();
 
         photon::thread_usleep((int)(fixedDelta * 1000000));
@@ -213,11 +222,9 @@ int Room::startRoomSimulation() {
 
     LOG_INFO("room ", mId, " game is end");
 
-    for (auto& entry : mUserMap) {
-        entry.second->user->GetPacketBuilder()->releaseAll();    
-        entry.second->user->GetPacketBuilder()->addGameResultPushMessage(game::GameStatusCode::GameStatusCode_End, mWinnerId);
-        entry.second->user->GetPacketBuilder()->sendPacketAndReset();
-    }
+    broadcastPacket(
+        SharedPacketBuilder.addGameResultPushMessage(game::GameStatusCode::GameStatusCode_End, mWinnerId).buildPacket()
+    );
 
     groupRoutine.stopAndWait();
     
@@ -230,6 +237,25 @@ const game::RoomSetting& Room::getRoomSetting() {
 
 const std::map<int, RoomUser*>& Room::getUsers() {
     return mUserMap;
+}
+
+Player* Room::getPlayer(User* user) {
+    return mPlayerMap[user];
+}
+
+void Room::sendPacket(User* user, const PacketBuilder& packet) {
+    const auto& buffer = packet.getIoBuffer();
+
+    Connection* connection = user->GetConnection();
+
+    while (!connection->bufferedWrite(buffer.begin(), buffer.size()))
+        connection->writeBuffer();
+}
+
+void Room::broadcastPacket(const PacketBuilder& packet) {
+    for (const auto& entry : mUserMap) {
+        sendPacket(entry.second->user, packet);
+    }
 }
 
 Room::~Room() {

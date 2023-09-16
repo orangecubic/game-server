@@ -19,7 +19,7 @@ int main() {
 
     MatchMaker* matchMaker = new MatchMaker(&workPool);
 
-    PacketProcess* packetprocessor = new PacketProcess(matchMaker);
+    PacketProcess* packetprocessor = new PacketProcess(&workPool, matchMaker);
 
     Server* server = new Server(&workPool, packetprocessor);
 
@@ -27,7 +27,9 @@ int main() {
         return -1;
     }
 
-    matchMaker->start();
+    photon::thread_create11([=](){
+        matchMaker->start();
+    });
 
     server->start(true);
 }

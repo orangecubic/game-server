@@ -27,6 +27,8 @@ inline game::RoomSetting getDefaultRoomSetting() {
     );
 }
 
+MatchMaker::MatchMaker(photon::WorkPool* workPool) : mWorkPool(workPool) { }
+
 MatchResult MatchMaker::matchRequest(const UserPtr& user, bool cancel) {
     BlockingQueue<MatchResult> syncer;
     mMatchingQueue.push({user, cancel, &syncer});
@@ -157,7 +159,7 @@ int MatchMaker::start() {
                 continue;
             }
 
-            auto room = std::shared_ptr<Room>(new Room(roomSequence++, std::vector<UserInfo>({user1, user2}), defaultSetting));
+            auto room = std::shared_ptr<Room>(new Room(roomSequence++, std::vector<User*>({user1.get(), user2.get()}), defaultSetting));
 
             photon::thread_create11([=](){
                 LOG_INFO("start simulation room ", room->getRoomId(), ", with worker ", selectedWorkerId);
@@ -165,8 +167,13 @@ int MatchMaker::start() {
                 startRoomSimulation(room, user1, user2);
             });
 
-            request1->syncer->push(MatchResult{room, room->getUserId(user1.get()), selectedWorkerId, game::MatchResultCode_Ok});
-            request2->syncer->push(MatchResult{room, room->getUserId(user2.get()), selectedWorkerId, game::MatchResultCode_Ok});
+            for (const auto& entry : room->getUsers()) {
+                if (entry.second->user == user1.get()) {
+                    request1->syncer->push(MatchResult{room, entry.first, selectedWorkerId, game::MatchResultCode_Ok});
+                } else if (entry.second->user == user2.get()) {
+                    request2->syncer->push(MatchResult{room, entry.first, selectedWorkerId, game::MatchResultCode_Ok});
+                }
+            }
 
             requestStatusMap.erase(user1.get());
             requestStatusMap.erase(user2.get());

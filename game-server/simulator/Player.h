@@ -65,12 +65,13 @@ public:
 
     void setMovementForce(int force);
     
-    void setLastShotTime();
-    void setLastPingTime();
+    bool shot();
+    
+    void startPingRoutine();
+    void endPingRoutine();
 
-    int64_t getLastPingTime();
+    int getPing();
 
-    int64_t getLastShotTime();
 private:
 
     int mPositionStatus = PlayerPositionStatus_Ground;
@@ -81,6 +82,7 @@ private:
     
     int mMovementForce;
 
-    int64_t mLastShotTime;
-    int64_t mLastPingTime;
+    std::chrono::high_resolution_clock::time_point mLastShotTime;
+    std::chrono::high_resolution_clock::time_point mPingStartTime;
+    int mPing = 0;
 };

@@ -3,17 +3,21 @@
 #include <algorithm>
 #include <vector>
 
-Packetbuilder::PacketBuilder(Connection* connection) : mConnection(connection) { }
+thread_local PacketBuilder* tlsPacketBuilder = new PacketBuilder;
 
-void PacketBuilder::addConnectRepMessage(bool success) {
+PacketBuilder& _sharedPacketBuilder() {
+    return *tlsPacketBuilder;
+}
+
+PacketBuilder& PacketBuilder::addConnectRepMessage(bool success) {
     auto offset = game::CreateConnectRep(mBuilder, success);
 
     mPayloadOffsetList.push_back(offset.Union());
     mPayloadTypeList.push_back(game::Payload_ConnectRep);
-    mPacketMonitor.notify_one();
+    return *this;
 }
 
-void PacketBuilder::addMatchRepMessage(game::MatchResultCode code, const game::RoomSetting& roomSetting, const std::vector<Packet_User>& userList) {
+PacketBuilder& PacketBuilder::addMatchRepMessage(game::MatchResultCode code, const game::RoomSetting& roomSetting, const std::vector<Packet_User>& userList) {
 
     int index = 0;
     std::vector<flatbuffers::Offset<game::UserInfo>> offsetVector(userList.size());
@@ -25,97 +29,107 @@ void PacketBuilder::addMatchRepMessage(game::MatchResultCode code, const game::R
 
     mPayloadOffsetList.push_back(offset.Union());
     mPayloadTypeList.push_back(game::Payload_MatchRep);
-    mPacketMonitor.notify_one();
+    return *this;
 }
 
-void PacketBuilder::addPingPushMessage(int delay) {
+PacketBuilder& PacketBuilder::addPingPushMessage(int delay) {
     auto offset = game::CreatePingPush(mBuilder, delay);
 
     mPayloadOffsetList.push_back(offset.Union());
     mPayloadTypeList.push_back(game::Payload_PingPush);
-    mPacketMonitor.notify_one();
+    return *this;
 }
 
-void PacketBuilder::addGameStatusPushMessage(game::GameStatusCode code, const std::vector<game::UserStatus>& userStatus) {
+PacketBuilder& PacketBuilder::addGameStatusPushMessage(game::GameStatusCode code, const std::vector<game::UserStatus>& userStatus) {
     auto offset = game::CreateGameStatusPush(mBuilder, code, mBuilder.CreateVectorOfStructs(userStatus));
 
     mPayloadOffsetList.push_back(offset.Union());
     mPayloadTypeList.push_back(game::Payload_GameStatusPush);
-
-    mPacketMonitor.notify_one();
+    return *this;
 }
 
-void PacketBuilder::addGameResultPushMessage(game::GameStatusCode code, int winnerId) {
+PacketBuilder& PacketBuilder::addGameResultPushMessage(game::GameStatusCode code, int winnerId) {
     auto offset = game::CreateGameStatusPush(mBuilder, code, 0, winnerId);
 
     mPayloadOffsetList.push_back(offset.Union());
     mPayloadTypeList.push_back(game::Payload_GameStatusPush);
-
-    mPacketMonitor.notify_one();
+    return *this;
 }
 
-void PacketBuilder::addSpawnEntityPushMessage(game::EntityType type, const game::EntityStatus& status) {
+PacketBuilder& PacketBuilder::addSpawnEntityPushMessage(game::EntityType type, const game::EntityStatus& status) {
     auto offset = game::CreateSpawnEntityPush(mBuilder, type, &status);
 
     mPayloadOffsetList.push_back(offset.Union());
     mPayloadTypeList.push_back(game::Payload_SpawnEntityPush);
-
-    mPacketMonitor.notify_one();
+    return *this;
 }
 
-void PacketBuilder::addCollisionEventPushMessage(int collisionCode, const game::EntityStatus& entityAStatus, const game::EntityStatus& entityBStatus) {
+PacketBuilder& PacketBuilder::addCollisionEventPushMessage(int collisionCode, const game::EntityStatus& entityAStatus, const game::EntityStatus& entityBStatus) {
     auto offset = game::CreateCollisionEventPush(mBuilder, collisionCode, &entityAStatus, &entityBStatus);
 
     mPayloadOffsetList.push_back(offset.Union());
     mPayloadTypeList.push_back(game::Payload_CollisionEventPush);
-
-    mPacketMonitor.notify_one();
+    return *this;
 }
 
-void PacketBuilder::addChangeEntityStatusPushMessage(const uint8_t* actions, int actionCount, const game::EntityStatus& entityStatus) {
+PacketBuilder& PacketBuilder::addChangeEntityStatusPushMessage(const uint8_t* actions, int actionCount, const game::EntityStatus& entityStatus) {
     auto offset = game::CreateChangeEntityStatusPush(mBuilder, mBuilder.CreateVector(actions, actionCount), &entityStatus);
 
     mPayloadOffsetList.push_back(offset.Union());
     mPayloadTypeList.push_back(game::Payload_ChangeEntityStatusPush);
-
-    mPacketMonitor.notify_one();
+    return *this;
+}
+int PacketBuilder::sendPacketAndReset(const UserPtr& user) {
+    return sendPacketAndReset(user.get());
 }
 
-void PacketBuilder::waitPacket() {
-    if(mBuilder.GetSize() != 0) {
-        return;
-    }
-    mPacketMonitor.wait_no_lock();
-}
-
-void PacketBuilder::releaseAll() {
-    mPacketMonitor.notify_all();
-}
-
-int PacketBuilder::sendPacketAndReset() {
+int PacketBuilder::sendPacketAndReset(User* user) {
     if (mPayloadOffsetList.empty()) {
         return -1;
     }
     
+    buildPacket();
+
+    const auto& buffer = getIoBuffer();
+    int result = user->GetConnection()->writev(buffer.begin(), buffer.size());
+
+    resetIoBuffer();
+
+    return result;
+}
+
+PacketBuilder& PacketBuilder::buildPacket() {
+
+    if (mPayloadOffsetList.empty()) {
+        return *this;
+    }
+
     auto packetOffset = game::CreatePacket(mBuilder, PROTOCOL_VERSION_SCALAR, mBuilder.CreateVector(mPayloadTypeList), mBuilder.CreateVector(mPayloadOffsetList));
     mBuilder.Finish(packetOffset);
 
     short packetSize = mBuilder.GetSize();
-    iovec sendVec[2] = {
-        {
-            &packetSize,
-            2
-        },
-        {
-            mBuilder.GetBufferPointer(),
-            mBuilder.GetSize()
-        }
+    this->mSendIoVector[0] = {
+        &packetSize,
+        2
     };
-    int result = this->mConnection->writev(sendVec, 2);
+    this->mSendIoVector[1] = {
+        mBuilder.GetBufferPointer(),
+        mBuilder.GetSize()
+    };
 
     mPayloadOffsetList.clear();
     mPayloadTypeList.clear();
+
+    return *this;
+}
+
+const std::array<iovec, 2>& PacketBuilder::getIoBuffer() const {
+    return this->mSendIoVector;
+}
+
+PacketBuilder& PacketBuilder::resetIoBuffer() {
     mBuilder.Clear();
 
-    return result;
+    return *this;
 }
+

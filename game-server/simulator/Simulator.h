@@ -21,6 +21,8 @@ struct CollisionEventSetting {
     int rockfallCode;
 };
 
+class Room;
+
 class Simulator : public b2ContactListener {
 public:
 
@@ -32,7 +34,7 @@ public:
         virtual void onHitRockfall(Player*, Rockfall*) = 0;
         virtual void onPickupHp(Player*, HpItem*) = 0;
     };
-    Simulator(int id, EventCallback* callback, float worldGravity, const std::set<int>& enabledContact = {
+    Simulator(Room* room, int id, EventCallback* callback, float worldGravity, const std::set<int>& enabledContact = {
         EntityType::Map | EntityType::Player,
         EntityType::Map | EntityType::Rockfall,
         EntityType::Map | EntityType::PlayerGunShot,
@@ -60,6 +62,8 @@ public:
 
     b2World* getWorld();
     
+    Room* getRoom();
+
     void triggerCollisionEvent(IEntity*, IEntity*);
     
     virtual void BeginContact(b2Contact* contact);
@@ -69,6 +73,7 @@ public:
 
     virtual ~Simulator();
 private:
+    Room* mRoom;
     const int mId;
 
     EventCallback* mEventCallback;

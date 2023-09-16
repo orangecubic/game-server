@@ -34,6 +34,7 @@ int Server::start(bool block) {
     // Nagle 알고리즘 해제
     this->mServer->setsockopt(IPPROTO_TCP, TCP_NODELAY, &nodelay);
 
+    // 포트 바인딩
     if (this->mServer->bind(this->mEndpoint.port, this->mEndpoint.addr) != 0) {
         LOG_ERRNO_RETURN(0, -1, "failed to bind server");
     }
@@ -59,11 +60,8 @@ int Server::init(const photon::net::EndPoint& address) {
     return 0;
 }
 
-void Server::stop(bool gracefulShutdown) {
+void Server::stop() {
     this->mServer->terminate();
-    if (gracefulShutdown) {
-
-    }
 }
 
 int Server::acceptHandler(photon::net::ISocketStream* stream) {

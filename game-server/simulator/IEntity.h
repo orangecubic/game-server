@@ -3,7 +3,9 @@
 #include "box2d/box2d.h"
 #include "Vec2.h"
 #include <string>
+#include <chrono>
 
+class Room;
 class Simulator;
 
 using IEntityType = int;

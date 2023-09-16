@@ -17,10 +17,21 @@ struct RoomUser {
     User* user;
 };
 
+game::Vec2 convertVec2(const simVec2& vec2);
+
+game::EntityStatus toEntityStatus(IEntity* entity);
+
 class Room : Simulator::EventCallback {
 private:
     Simulator* mWorldSimulator;
+
+    // Player Id -> User
     std::map<int, RoomUser*> mUserMap;
+
+    // User -> Player
+    std::map<User*, Player*> mPlayerMap;
+
+    PacketBuilder mSharedPacketBuilder;
 
     bool mRun = true;
     game::GameStatusCode mStatusCode;
@@ -32,7 +43,10 @@ private:
     const std::chrono::system_clock::time_point mCreationTime;
 
     void onPlayerHit(Player*);
-    void syncUser(RoomUser*);
+    void syncUser();
+
+    void sendPacket(User* user, const PacketBuilder& packet);
+
 public:
     Room(int roomId, const std::vector<User*>& users, game::RoomSetting setting);
         
@@ -44,6 +58,9 @@ public:
     int getRoomId();
     const game::RoomSetting& getRoomSetting();
     const std::map<int, RoomUser*>& getUsers();
+    Player* getPlayer(User* user);
+
+    void broadcastPacket(const PacketBuilder& packet);
 
     virtual void onPlayerContactMap(Player*, IMap*);
     virtual void onPlayerHitGunshot(Player*, GunShot*);

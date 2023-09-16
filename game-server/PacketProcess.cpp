@@ -3,8 +3,10 @@
 
 #define USER_KEY 999
 
+PacketProcess::PacketProcess(photon::WorkPool* workPool, MatchMaker* matchMaker) : mWorkPool(workPool), mMatchMaker(matchMaker) { }
+
 void PacketProcess::onConnect(const std::shared_ptr<Connection>& connection) {
-    connection->setAttribute(USER_KEY, reinterpret_cast<uint64_t>(new UserPtr(new User(connection))), false);
+    connection->setAttribute(USER_KEY, reinterpret_cast<uint64_t>(new UserPtr(new User(mWorkPool, connection))), false);
 }
 
 void PacketProcess::onDisconnect(const std::shared_ptr<Connection>& connection) {
@@ -21,12 +23,11 @@ void PacketProcess::onDisconnect(const std::shared_ptr<Connection>& connection) 
         mNicknameSet.erase(std::string(user->GetNickname()));
     }
 
-    BlockingQueue<MatchResult> syncer;
-    mMatchMaker->matchRequest({user, true, &syncer});
+    mMatchMaker->matchRequest(user, true);
 
     Room* room = user->GetRoom();
     if (room != nullptr) {
-        this->mWorkPool->thread_migrate(photon::CURRENT, user->GetWorkerId());
+        user->migrateThreadIfNeed();
         room->disconnectUser(user.get());
     }
 
@@ -54,27 +55,29 @@ void PacketProcess::onPacket(const std::shared_ptr<Connection>& connection, cons
     for (auto payloadType : *payloadTypes) {
 
         if (!user->IsAvailableState((game::Payload)payloadType)) {
+            LOG_WARN("not available state user: ", user->GetNickname().c_str(), ", packet: ", payloadType);
             continue;
         }
 
         switch (payloadType) {
         case game::Payload_ConnectReq:
-            this->OnConnectReq(user, static_cast<const game::ConnectReq*>(payloads->Get(indexer++)));
+            this->OnConnectReq(user, static_cast<const game::ConnectReq*>(payloads->Get(indexer)));
             return;
         case game::Payload_MatchReq:
-            RoutinePerPacketMiddleware(user, static_cast<const game::MatchReq*>(payloads->Get(indexer++)), OnMatchReq);
+            RoutinePerPacketMiddleware(user, static_cast<const game::MatchReq*>(payloads->Get(indexer)), OnMatchReq);
             return;
         case game::Payload_BattleReadyReq:
-            RoutinePerPacketMiddleware(user, static_cast<const game::BattleReadyReq*>(payloads->Get(indexer++)), OnBattleReadyReq);
+            RoutinePerPacketMiddleware(user, static_cast<const game::BattleReadyReq*>(payloads->Get(indexer)), OnBattleReadyReq);
             break;
         case game::Payload_ChangePlayerStatusReq:
-            RoutinePerPacketMiddleware(user, static_cast<const game::ChangePlayerStatusReq*>(payloads->Get(indexer++)), OnChangePlayerStatusReq);
+            RoutinePerPacketMiddleware(user, static_cast<const game::ChangePlayerStatusReq*>(payloads->Get(indexer)), OnChangePlayerStatusReq);
             break;
         case game::Payload_PingAck:
-            RoutinePerPacketMiddleware(user, static_cast<const game::PingAck*>(payloads->Get(indexer++)), OnPingAck);
+            RoutinePerPacketMiddleware(user, static_cast<const game::PingAck*>(payloads->Get(indexer)), OnPingAck);
             break;
         }
         
+        indexer++;
     }
 }
 
@@ -90,11 +93,10 @@ void PacketProcess::OnConnectReq(const UserPtr& user, const game::ConnectReq* pa
         user->SetAuthenticated(packet->nickname()->str());
         user->SetState(UserState::Lobby);
 
-        LOG_INFO("client ", user->GetConnection()->id(), " has nickname ", user->GetNickname());
+        LOG_INFO("client ", user->GetConnection()->id(), " has nickname ", user->GetNickname().c_str());
     }
 
-    user->GetPacketBuilder()->addConnectRepMessage(success);
-    user->GetPacketBuilder()->sendPacketAndReset();
+    SharedPacketBuilder.addConnectRepMessage(success).sendPacketAndReset(user);
 }
 
 void PacketProcess::OnMatchReq(const UserPtr& user, const game::MatchReq* packet) {
@@ -105,14 +107,16 @@ void PacketProcess::OnMatchReq(const UserPtr& user, const game::MatchReq* packet
     auto result = this->mMatchMaker->matchRequest(user, cancel);
 
     if (result.resultCode == game::MatchResultCode_Ok) {
+
+        user->SetState(UserState::BattleWait);
+        user->SetRoom(result.room, result.workerId, result.room->getPlayer(user.get()));
+
+        // 매칭 완료 타이밍과 커넥션 종료가 겹치면 Room의 worker thread로 가서 유저 종료 처리
         if (!user->GetConnection()->isConnected()) {
-            this->mWorkPool->thread_migrate(photon::CURRENT, result.workerId);
+            user->migrateThreadIfNeed();
             result.room->disconnectUser(user.get());
             return;
         }
-
-        user->SetState(UserState::BattleWait);
-        user->SetRoom(result.room, result.workerId, result.room->getUsers()[result.userId]);
 
         const auto& userMap = result.room->getUsers();
 
@@ -121,8 +125,7 @@ void PacketProcess::OnMatchReq(const UserPtr& user, const game::MatchReq* packet
             packetUsers.push_back({entry.second->user->GetNickname(), entry.first});
         }
 
-        user->GetPacketBuilder()->addMatchRepMessage(result.resultCode, result.room->getRoomSetting(), packetUsers);
-        user->GetPacketBuilder()->sendPacketAndReset();
+        SharedPacketBuilder.addMatchRepMessage(result.resultCode, result.room->getRoomSetting(), packetUsers).sendPacketAndReset(user);
 
         return;
 
@@ -132,12 +135,7 @@ void PacketProcess::OnMatchReq(const UserPtr& user, const game::MatchReq* packet
         user->SetState(UserState::Lobby);
     }
 
-    // create own packet builder to avoid race condition
-    PacketBuilder builder(user->GetConnection());
-
-    builder.addMatchRepMessage(result.resultCode, {}, {});
-    builder.sendPacketAndReset();
-
+    SharedPacketBuilder.addMatchRepMessage(result.resultCode, {}, {}).sendPacketAndReset(user);
 }
 
 void PacketProcess::OnBattleReadyReq(const UserPtr& user, const game::BattleReadyReq* packet) {
@@ -175,22 +173,23 @@ void PacketProcess::OnChangePlayerStatusReq(const UserPtr& user, const game::Cha
             }
             break;
         case game::EntityAction_Shot:
-            auto now = std::chrono::system_clock::now();
 
-            if ((now - std::chrono::milliseconds(player->getLastShotTime())).time_since_epoch().count() >= user->GetRoom()->getRoomSetting().player_shot_cooltime()) {
-                // mWorldSimulator->spawnPlayerGunShot(player, mSetting.gunshot_damage());
+            if (player->shot()) {
                 allowedActions[actionCount++] = action;
-                player->setLastShotTime();
             }
 
             break;
         }
     }
+
+    user->GetRoom()->broadcastPacket(
+        SharedPacketBuilder.addChangeEntityStatusPushMessage(allowedActions.begin(), actionCount, toEntityStatus(player)).buildPacket()
+    );
 }
 
 void PacketProcess::OnPingAck(const UserPtr& user, const game::PingAck* packet) {
     Player* player = user->GetPlayer();
     if (player == nullptr)
         return;
-    player->setLastPingTime();
+    player->endPingRoutine();
 }
