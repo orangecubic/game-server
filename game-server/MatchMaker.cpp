@@ -104,12 +104,12 @@ int MatchMaker::start() {
         }
 
         if(readyIndex > 0) {
-                unreadyBuffer.eraseFront(readyIndex);
+            unreadyBuffer.eraseFront(readyIndex);
         }
 
         if(readyBuffer.size() < 2) {
 
-            if (readyBuffer.size() == 0) {
+            if (readyBuffer.size() == 1 && readyBuffer[0]->canceled) {
                 LOG_INFO("erase canceled request");
                 
                 auto matchData = readyBuffer[0];

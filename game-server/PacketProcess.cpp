@@ -103,7 +103,9 @@ void PacketProcess::OnMatchReq(const UserPtr& user, const game::MatchReq* packet
 
     user->SetState(UserState::Matching);
     bool cancel = packet->cancel();
-        
+    
+    LOG_INFO("match request client", user->GetNickname().c_str());
+
     auto result = this->mMatchMaker->matchRequest(user, cancel);
 
     if (result.resultCode == game::MatchResultCode_Ok) {

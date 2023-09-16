@@ -2,11 +2,20 @@
 #include "net/Server.h"
 #include <algorithm>
 #include <vector>
+#include "photon/common/alog.h"
 
 thread_local PacketBuilder* tlsPacketBuilder = new PacketBuilder;
 
 PacketBuilder& _sharedPacketBuilder() {
     return *tlsPacketBuilder;
+}
+
+PacketBuilder::PacketBuilder() {
+    
+    mSendIoVector[0] = {
+        new PacketLength,
+        sizeof(PacketLength)
+    };
 }
 
 PacketBuilder& PacketBuilder::addConnectRepMessage(bool success) {
@@ -107,11 +116,10 @@ PacketBuilder& PacketBuilder::buildPacket() {
     auto packetOffset = game::CreatePacket(mBuilder, PROTOCOL_VERSION_SCALAR, mBuilder.CreateVector(mPayloadTypeList), mBuilder.CreateVector(mPayloadOffsetList));
     mBuilder.Finish(packetOffset);
 
-    short packetSize = mBuilder.GetSize();
-    this->mSendIoVector[0] = {
-        &packetSize,
-        2
-    };
+    PacketLength packetSize = PacketLength(mBuilder.GetSize());
+
+    std::memcpy(this->mSendIoVector[0].iov_base, &packetSize, sizeof(PacketLength));
+
     this->mSendIoVector[1] = {
         mBuilder.GetBufferPointer(),
         mBuilder.GetSize()

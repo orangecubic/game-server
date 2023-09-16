@@ -19,6 +19,8 @@ private:
 
     std::array<iovec, 2> mSendIoVector;
 public:
+
+    PacketBuilder();
     PacketBuilder& addConnectRepMessage(bool success);
     PacketBuilder& addMatchRepMessage(game::MatchResultCode code, const game::RoomSetting& roomSetting, const std::vector<Packet_User>& userList);
 

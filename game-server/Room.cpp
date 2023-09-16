@@ -67,6 +67,8 @@ int Room::getRoomId() {
 
 void Room::onPlayerHit(Player* player) {
 
+    LOG_INFO("player hit least hp is ", player->getHp());
+
     if (player->getHp() <= 0) {
         auto winnerEntry = std::find_if(mUserMap.begin(), mUserMap.end(), [=](const std::pair<int, RoomUser*>& entry) {
             return entry.second->user->GetPlayer()->getEntityId() != player->getEntityId();
@@ -144,23 +146,12 @@ int Room::startRoomSimulation() {
         auto roomUser = user.second;
 
         groupRoutine.loopWithGroup([&](){
-            
             Connection* connection = user.second->user->GetConnection();
             
             connection->waitWriteBuffer();
             connection->writeBuffer();
         });
     }
-
-    // ping routine
-    groupRoutine.loopWithGroup([&]() {
-        for (auto& entry : mUserMap) {
-            entry.second->user->GetPlayer()->startPingRoutine();
-            sendPacket(entry.second->user, SharedPacketBuilder.addPingPushMessage(entry.second->user->GetPlayer()->getPing()).buildPacket());
-        }
-
-        photon::thread_sleep(3);
-    });
 
     bool clientReady = false;
     do {
@@ -178,11 +169,18 @@ int Room::startRoomSimulation() {
 
     photon::thread_sleep(mSetting.starting_countdown_second());
 
+    for (const auto& entry : mUserMap) {
+        entry.second->user->SetState(UserState::InGame);
+    }
+
     std::random_device rd;
 
     // spawn routine
     groupRoutine.loopWithGroup([&]() {
         photon::thread_sleep(5);
+
+        LOG_INFO("spawn rockfall");
+
         int count = rd() % 3 + 1;
 
         for (int iter = 0; iter < count; iter++) {
@@ -191,6 +189,16 @@ int Room::startRoomSimulation() {
                 SharedPacketBuilder.addSpawnEntityPushMessage(game::EntityType_Rockfall, toEntityStatus(rockfall)).buildPacket()
             );
         }
+    });
+
+    // ping routine
+    groupRoutine.loopWithGroup([&]() {
+        for (auto& entry : mUserMap) {
+            entry.second->user->GetPlayer()->startPingRoutine();
+            sendPacket(entry.second->user, SharedPacketBuilder.addPingPushMessage(entry.second->user->GetPlayer()->getPing()).buildPacket());
+        }
+
+        photon::thread_sleep(3);
     });
 
     mStatusCode = game::GameStatusCode_Start;
@@ -218,16 +226,31 @@ int Room::startRoomSimulation() {
         mWorldSimulator->simulate(delta);
     }
 
+    // sender routine을 포함한 routine 종료
+    photon::thread* handle = photon::thread_create11([&](){
+        groupRoutine.stopAndWait();
+    });
+
+    // 핑 패킷으로 sender routine lock 해제
+    broadcastPacket(
+        SharedPacketBuilder.addPingPushMessage(0).buildPacket()
+    );
+
     mStatusCode = game::GameStatusCode_End;
+    
+    // routine 해제 대기
+    photon::thread_join(photon::thread_enable_join(handle));
 
-    LOG_INFO("room ", mId, " game is end");
-
+    // routine 해제가 완료되면 게임 종료 패킷 전송
     broadcastPacket(
         SharedPacketBuilder.addGameResultPushMessage(game::GameStatusCode::GameStatusCode_End, mWinnerId).buildPacket()
     );
 
-    groupRoutine.stopAndWait();
-    
+    // sender routine이 종료됐으니 직접 전송
+    for (const auto& entry : mUserMap) {
+        entry.second->user->GetConnection()->writeBuffer();
+    }
+
     return mWinnerId;
 }
 

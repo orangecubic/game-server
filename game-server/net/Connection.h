@@ -24,7 +24,8 @@ public:
     bool bufferedWrite(const iovec* vec, int count);
     int writeBuffer();
     void waitWriteBuffer();
-
+    void notifyWaiter();
+    
     void close();
     void setAttribute(int key, uint64_t value, bool autoDelete);
     uint64_t getAttribute(int key);

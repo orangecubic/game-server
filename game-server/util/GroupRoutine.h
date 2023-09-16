@@ -6,7 +6,7 @@
 
 class GroupRoutine {
 private:
-    std::vector<photon::join_handle*> mJoinHandles;
+    std::vector<photon::thread*> mThreadHandles;
     bool mRun = true;
 public:
     void loopWithGroup(std::function<void()> logic);

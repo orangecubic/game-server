@@ -66,12 +66,19 @@ int Connection::writeBuffer() {
 }
 
 void Connection::waitWriteBuffer() {
+    if (mWriteBufferSize != 0 || !isConnected())
+        return;
     mWriteBufferMonitor.wait_no_lock();
+}
+
+void Connection::notifyWaiter() {
+    mWriteBufferMonitor.notify_all();
 }
 
 void Connection::close() {
     mIsConnected = false;
     this->mStream->close();
+    notifyWaiter();
 }
 
 void Connection::setAttribute(int key, uint64_t value, bool autoDelete) {

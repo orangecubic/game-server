@@ -21,7 +21,7 @@ public:
     bool IsAuthenticated();
     const std::string& GetNickname();
     
-    Connection* GetConnection();\
+    Connection* GetConnection();
     Room* GetRoom();
     Player* GetPlayer();
 

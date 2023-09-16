@@ -10,13 +10,14 @@ void GroupRoutine::loopWithGroup(std::function<void()> logic) {
         }
     });
 
-    mJoinHandles.push_back(photon::thread_enable_join(thread));
+    mThreadHandles.push_back(thread);
 }
 
 void GroupRoutine::stopAndWait() {
     mRun = false;
 
-    for (auto handle : mJoinHandles) {
-        photon::thread_join(handle);
+    for (auto handle : mThreadHandles) {
+        photon::thread_interrupt(handle);
+        photon::thread_join(photon::thread_enable_join(handle));
     }
 }
