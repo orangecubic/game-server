@@ -56,7 +56,7 @@ int MatchMaker::start() {
 
     profiler.startProfiler();
 
-    std::map<User*, MatchData> requestStatusMap;
+    std::unordered_map<User*, MatchData> requestStatusMap;
     SequentialBuffer<MatchData*> unreadyBuffer(5000);
     SequentialBuffer<MatchData*> readyBuffer(3000);
     

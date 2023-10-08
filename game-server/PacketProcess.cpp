@@ -67,13 +67,13 @@ void PacketProcess::onPacket(const std::shared_ptr<Connection>& connection, cons
             RoutinePerPacketMiddleware(user, static_cast<const game::MatchReq*>(payloads->Get(indexer)), OnMatchReq);
             return;
         case game::Payload_BattleReadyReq:
-            RoutinePerPacketMiddleware(user, static_cast<const game::BattleReadyReq*>(payloads->Get(indexer)), OnBattleReadyReq);
+            this->OnBattleReadyReq(user, static_cast<const game::BattleReadyReq*>(payloads->Get(indexer)));
             break;
         case game::Payload_ChangePlayerStatusReq:
-            RoutinePerPacketMiddleware(user, static_cast<const game::ChangePlayerStatusReq*>(payloads->Get(indexer)), OnChangePlayerStatusReq);
+            this->OnChangePlayerStatusReq(user, static_cast<const game::ChangePlayerStatusReq*>(payloads->Get(indexer)));
             break;
         case game::Payload_PingAck:
-            RoutinePerPacketMiddleware(user, static_cast<const game::PingAck*>(payloads->Get(indexer)), OnPingAck);
+            this->OnPingAck(user, static_cast<const game::PingAck*>(payloads->Get(indexer)));
             break;
         }
         
